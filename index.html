@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Onliner</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div class="headrow">
+      <h1>The Onliner <span class="ver">1.0</span></h1>
+      <div class="projrow">
+        <div id="projectLine" class="muted">Reading project&hellip;</div>
+        <sp-action-button id="btnRefresh" quiet size="s" title="Re-read the active project">&#8635;</sp-action-button>
+      </div>
+    </div>
+  </header>
+
+  <div class="scroll">
+
+    <section>
+      <h2>Source Sequence</h2>
+      <select id="sourceSelect"></select>
+      <div id="sourceNote" class="note">The locked offline. Outputs are named from this.</div>
+    </section>
+
+    <!-- ---------------------------------------------------------------- -->
+    <section id="secRef">
+      <h2>Reference Export</h2>
+      <sp-checkbox id="refEnabled" size="s">Export a reference</sp-checkbox>
+      <div id="refBody" class="subfield">
+        <sp-checkbox id="refBurnIn" size="s">Burn in timecode</sp-checkbox>
+        <div class="note">The reference is built as a nest of the source and the
+        burn-in goes on that, so the locked offline is never touched.</div>
+        <div class="sublabel">Suffix</div>
+        <sp-textfield id="refSuffix" size="s" placeholder="_REF"></sp-textfield>
+        <div id="refPreview" class="preview"></div>
+
+        <div class="sublabel">Export preset</div>
+        <select id="refPreset"></select>
+        <div id="refPresetNote" class="note">Your own presets are listed first.</div>
+
+        <div class="sublabel">When to render</div>
+        <sp-radio-group id="refExportMode" column>
+          <sp-radio value="now" size="s">Render now, in Premiere</sp-radio>
+          <sp-radio value="ame" size="s">Queue to Media Encoder</sp-radio>
+        </sp-radio-group>
+        <div id="refExportModeNote" class="note"></div>
+
+        <div class="sublabel">Export to</div>
+        <div id="refFolderLine" class="preview">No folder chosen</div>
+        <sp-button id="refPickFolder" variant="secondary" size="s">Choose folder&hellip;</sp-button>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------------- -->
+    <section id="secGrade">
+      <h2>Grade</h2>
+      <sp-checkbox id="gradeEnabled" size="s">Build a grade timeline</sp-checkbox>
+      <div id="gradeBody" class="subfield">
+        <sp-checkbox id="gradeStripToVideo" size="s">Strip to video-only tracks</sp-checkbox>
+        <sp-checkbox id="gradeResetMotion" size="s">Reset Motion to default</sp-checkbox>
+        <div class="note">Position, scale and rotation. Motion itself cannot be
+        removed, only reset &mdash; same for Opacity.</div>
+        <sp-checkbox id="gradeRemoveEffects" size="s">Remove other applied effects</sp-checkbox>
+        <sp-checkbox id="gradeRemoveDisabled" size="s">Remove disabled clips</sp-checkbox>
+        <div class="note">Clips switched off in the edit are invisible in the
+        programme but still export into the XML. Gaps are left in place &mdash;
+        nothing is rippled, so the conform still lines up.</div>
+        <sp-checkbox id="gradeRemoveAdjustment" size="s">Remove adjustment layers</sp-checkbox>
+        <div class="note">They almost always carry the temp grade, which is the
+        last thing the colourist wants arriving on top of their timeline.</div>
+        <sp-checkbox id="gradeRemoveHidden" size="s">Remove clips hidden by layers above</sp-checkbox>
+        <div class="note">A clip covered for its whole length by a clip on a
+        higher track is invisible in the programme but still conforms from the
+        XML. <strong>Turn this off if you stack clips with alpha</strong> &mdash;
+        a logo or matte covers the time without hiding the picture, and this
+        cannot tell the difference. Partly-covered clips are always kept and
+        listed instead.</div>
+        <sp-checkbox id="gradeFlatten" size="s">Flatten to a single video track</sp-checkbox>
+        <div class="note">Brings every clip down to V1, the top layer winning &mdash;
+        the clip underneath is trimmed back where they overlap. Off by default
+        because it is destructive to real composites: <strong>anything stacked
+        for a reason, including alpha graphics, is flattened into the picture
+        or trimmed away.</strong> Remove your graphics first.</div>
+        <sp-checkbox id="gradeExportXML" size="s">Auto-export FCPXML</sp-checkbox>
+        <sp-checkbox id="gradeStripEmptyTracks" size="s">Strip empty tracks from the XML</sp-checkbox>
+        <div class="note">Premiere has no way to delete a track, so the grade
+        sequence keeps the source's full track count &mdash; the teaser exported
+        10 video and 30 audio tracks with clips on one. They come out of the
+        exported file instead. The clip count is checked before and after, and
+        the XML is left untouched if it does not match.</div>
+        <div class="sublabel">Suffix</div>
+        <sp-textfield id="gradeSuffix" size="s" placeholder="_FOR_GRADE"></sp-textfield>
+        <div id="gradePreview" class="preview"></div>
+
+        <div class="sublabel">FCPXML to</div>
+        <div id="gradeFolderLine" class="preview">No folder chosen</div>
+        <sp-button id="gradePickFolder" variant="secondary" size="s">Choose folder&hellip;</sp-button>
+        <div class="note">Clips using Time Remapping are listed in the report &mdash;
+        speed changes cannot be read or reset by any script, so they need doing
+        by hand.</div>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------------- -->
+    <section id="secMix">
+      <h2>Mix</h2>
+      <sp-checkbox id="mixEnabled" size="s">Build a mix timeline</sp-checkbox>
+      <div id="mixBody" class="subfield">
+        <sp-checkbox id="mixStripToAudio" size="s">Strip to audio-only tracks</sp-checkbox>
+        <sp-checkbox id="mixRemoveDisabled" size="s">Remove disabled clips</sp-checkbox>
+        <div class="note">Audio switched off in the edit is silent in the
+        programme but still travels in the AAF. Gaps are left in place &mdash;
+        nothing is rippled, so the sync is unchanged.</div>
+        <div class="sublabel">Audio effects on the mix timeline</div>
+        <sp-radio-group id="mixEffects" column>
+          <sp-radio value="keep" size="s">Keep</sp-radio>
+          <sp-radio value="remove" size="s">Remove</sp-radio>
+        </sp-radio-group>
+        <div id="mixEffectsNote" class="note"></div>
+        <sp-checkbox id="mixExportAAF" size="s">Auto-export AAF</sp-checkbox>
+
+        <div id="aafSettings" class="subfield">
+          <div class="sublabel">AAF Export Settings</div>
+          <div class="note">The same settings, in the same order and wording, as
+          Premiere&rsquo;s own AAF Export dialog.</div>
+
+          <sp-checkbox id="aafMixdownVideo" size="s">Mixdown video</sp-checkbox>
+          <div class="note">Renders and embeds a video mixdown. In testing this
+          took the same AAF from 3&nbsp;MB to <strong>2.9&nbsp;GB</strong> plus a
+          1.5&nbsp;GB render beside it &mdash; a mixer has no use for it.</div>
+
+          <div class="sublabel">Breakout to Mono</div>
+          <sp-checkbox id="aafExplodeToMono" size="s">Enable</sp-checkbox>
+          <sp-checkbox id="aafRenderAudioEffects" size="s">Render audio clip effects</sp-checkbox>
+          <sp-checkbox id="aafInterleaveWithoutEffects" size="s">Include clip copies without effects</sp-checkbox>
+
+          <div class="sublabel">Sample Rate</div>
+          <select id="aafSampleRate">
+            <option value="48000">48000</option>
+            <option value="96000">96000</option>
+            <option value="44100">44100</option>
+          </select>
+
+          <div class="sublabel">Bits per Sample</div>
+          <select id="aafBitsPerSample">
+            <option value="16">16</option>
+            <option value="24">24</option>
+            <option value="32">32</option>
+          </select>
+
+          <div class="sublabel">Files</div>
+          <select id="aafFiles">
+            <option value="separate">Separate Audio</option>
+            <option value="embedded">Embedded Audio</option>
+          </select>
+
+          <sp-checkbox id="aafPreserveParentFolder" size="s">Preserve media directory name</sp-checkbox>
+
+          <div class="sublabel">Format</div>
+          <select id="aafFormat">
+            <option value="1">Broadcast Wave</option>
+            <option value="0">AIFF</option>
+          </select>
+
+          <div class="sublabel">Render</div>
+          <select id="aafRender">
+            <option value="copy">Copy Complete Audio Files</option>
+            <option value="trim">Trim Audio Files</option>
+          </select>
+
+          <div class="sublabel">Handle Frames</div>
+          <input type="number" id="aafHandleFrames" min="0" max="300" step="1" value="0">
+          <div id="aafHandleNote" class="note"></div>
+
+          <div class="note">Premiere&rsquo;s dialog also has <em>Use tape sources
+          when present</em>; the scripting API does not expose it, so it is not
+          here rather than being here and doing nothing.</div>
+        </div>
+
+        <div class="sublabel">AAF to</div>
+        <div id="mixFolderLine" class="preview">No folder chosen</div>
+        <sp-button id="mixPickFolder" variant="secondary" size="s">Choose folder&hellip;</sp-button>
+        <div class="sublabel">Suffix</div>
+        <sp-textfield id="mixSuffix" size="s" placeholder="_FOR_MIX"></sp-textfield>
+        <div id="mixPreview" class="preview"></div>
+      </div>
+    </section>
+
+    <section id="reportSection" hidden>
+      <h2>Report</h2>
+      <div id="report"></div>
+    </section>
+
+  </div>
+
+  <footer>
+    <div id="capsLine" class="muted tiny"></div>
+    <div id="status" class="status"></div>
+    <div id="blockHint" class="note warn" hidden></div>
+    <div id="continueRow" hidden>
+      <div id="continueMsg" class="note warn"></div>
+      <div class="actions">
+        <sp-button id="btnContinue" variant="cta" size="s">I&rsquo;ve flattened them — continue</sp-button>
+        <sp-button id="btnSkipXml" variant="secondary" size="s">Skip the FCPXML</sp-button>
+      </div>
+    </div>
+    <div class="actions">
+      <sp-button id="btnAnalyse" variant="secondary" size="s">Add Analysis to Queue</sp-button>
+      <sp-button id="btnProcess" variant="cta" size="s">Add Process to Queue</sp-button>
+    </div>
+  </footer>
+</div>
+
+<!-- Only the entry point is a script tag; it pulls the rest in with require(),
+     the pattern UXP actually supports for local modules. -->
+<script src="js/app.js"></script>
+</body>
+</html>

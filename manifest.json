@@ -1,0 +1,36 @@
+{
+  "id": "theonliner",
+  "name": "The Onliner",
+  "version": "1.0.0",
+  "main": "index.html",
+  "manifestVersion": 5,
+  "host": {
+    "app": "premierepro",
+    "minVersion": "25.6.0"
+  },
+  "requiredPermissions": {
+    "localFileSystem": "fullAccess",
+    "allowCodeGenerationFromStrings": false
+  },
+  "entrypoints": [
+    {
+      "id": "theonliner.panel",
+      "type": "panel",
+      "label": {
+        "default": "The Onliner"
+      },
+      "minimumSize": {
+        "width": 300,
+        "height": 320
+      },
+      "preferredDockedSize": {
+        "width": 340,
+        "height": 640
+      },
+      "preferredFloatingSize": {
+        "width": 380,
+        "height": 760
+      }
+    }
+  ]
+}
