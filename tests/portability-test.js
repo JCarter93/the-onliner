@@ -27,7 +27,7 @@
 var passed = 0, failed = 0;
 function ok(cond, label) { if (cond) passed++; else { failed++; print("FAIL  " + label); } }
 
-var PANEL_FILES = ["js/app.js", "js/ppro.js", "js/fcpxml.js", "js/presets.js",
+var PANEL_FILES = ["js/app.js", "js/ppro.js", "js/fcpxml.js", "js/presets.js", "js/cepbridge.js", "js/burnin.js",
                    "js/naming.js", "js/prefs.js", "index.html"];
 var ROOT_HOLDER = "js/platform.js";
 

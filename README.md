@@ -71,14 +71,31 @@ not the plugin root (hence `requireSibling`), and the registry path must be
 `docs/API-FINDINGS.md` §20. Not exercised there: the AAF export and the
 queue-to-AME route, which use the same path shape as the two that were.
 
+## Premiere 2025
+
+Premiere 25.x has no FCPXML or AAF export in its UXP API, so on 2025 those two
+exports go through **The Onliner CEP Bridge** (`cep-bridge/`) - a headless CEP
+extension that runs them through ExtendScript for the panel. The dev installer
+puts it in place beside the panel (`~/Library/Application Support/Adobe/CEP/extensions/theonliner.cepbridge`,
+or `%APPDATA%\Adobe\CEP\extensions\...` on Windows) and turns on CEP's
+PlayerDebugMode. It starts with Premiere; there is nothing to open. The status
+line reads `FCPXML ✓ via CEP · AAF ✓ via CEP` when it is in use, and the report
+marks each export that went through it. Its manifest limits it to Premiere
+25.x: on 26.x the panel exports natively and the bridge does not even load.
+
+One behaviour differs on 2025: its AAF exporter only writes new audio files
+when **Breakout to Mono** is on. With it off the AAF links the original media,
+and Trim, Embedded and Render audio clip effects do nothing - the Mix card
+says so when it happens. Verified on Premiere 25.6.6 (macOS); the Windows
+install step is written but not yet run. Details: `docs/API-FINDINGS.md` §22.
+
 ## Tests
 
 ```bash
 ./scripts/run-tests.sh
 ```
 
-There is no Node on this machine, so the pure-logic tests run under
-JavaScriptCore (`jsc`). Only logic that does not touch the Premiere API is
+The pure-logic tests run under JavaScriptCore (`jsc`), so they need no Node. Only logic that does not touch the Premiere API is
 covered this way — naming, collision versioning, file-stem sanitising. Anything
 that talks to Premiere is tested in the app, per the phase test plans in the
 build spec.
@@ -97,6 +114,8 @@ build spec.
 | `js/platform.js` | The only module allowed to name a platform root: path joins, file URLs, the AME install roots. Pure, tested. |
 | `js/presets.js` | Finds the Media Encoder `.epr` presets, house ones first. |
 | `js/fcpxml.js` | Strips empty tracks from the exported XML and reads Premiere's translation report. Pure where it can be, tested. |
+| `js/cepbridge.js` | The panel's side of the CEP bridge: queue, heartbeat-based waiting, which AAF options 25.x ignores. Pure parts tested. |
+| `cep-bridge/` | **The Onliner CEP Bridge** - headless CEP extension that runs the FCPXML/AAF exports through ExtendScript on Premiere 25.x. `js/queue.js` is the protocol (pure, tested), `js/main.js` the I/O loop, `host/exports.jsx` the ExtendScript (tested in jsc against a fake `app`). |
 | `tests/portability-test.js` | Static guard: no Mac path may appear in panel code. |
 | `docs/API-FINDINGS.md` | What the runtime actually exposes, where it differs from the docs and from the spec. Read this before the next phase. |
 

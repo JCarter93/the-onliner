@@ -238,6 +238,9 @@ async function probeCapabilities() {
     hostVersion: null,
     exportFCPXML: typeof converter.exportAsFinalCutProXML === "function",
     exportAAF: typeof converter.exportAAF === "function",
+    // "uxp" | "cep" | null - which route each export takes on this build.
+    exportVia: { fcpxml: null, aaf: null },
+    cepBridge: null,
     exportOTIO: typeof converter.exportAsOpenTimelineIO === "function",
     aafOptions: typeof P.AAFExportOptions === "function",
     encoder: false,
@@ -272,7 +275,34 @@ async function probeCapabilities() {
     caps.timecodeFilter = null;
   }
 
+  // Premiere 25.x has no ProjectConverter in UXP at all. Where a native export
+  // is missing, the CEP bridge can do it through ExtendScript - if it is
+  // installed and Premiere has started it (docs/API-FINDINGS.md §22).
+  caps.exportVia.fcpxml = caps.exportFCPXML ? "uxp" : null;
+  caps.exportVia.aaf = caps.exportAAF && caps.aafOptions ? "uxp" : null;
+  if (!caps.exportVia.fcpxml || !caps.exportVia.aaf) {
+    const bridge = await cepBridge().status();
+    caps.cepBridge = bridge;
+    const bc = bridge.running && bridge.caps ? bridge.caps : {};
+    if (!caps.exportVia.fcpxml && bc.exportFCPXML) caps.exportVia.fcpxml = "cep";
+    if (!caps.exportVia.aaf && bc.exportAAF) caps.exportVia.aaf = "cep";
+  }
+  caps.exportFCPXML = !!caps.exportVia.fcpxml;
+  caps.exportAAF = !!caps.exportVia.aaf;
+
   return caps;
+}
+
+function cepBridge() {
+  return requireSibling("cepbridge");
+}
+
+/** Which route an export takes right now - asked live, at the point of use. */
+function nativeExport(kind) {
+  const P = ppro();
+  const converter = P.ProjectConverter || {};
+  if (kind === "fcpxml") return typeof converter.exportAsFinalCutProXML === "function";
+  return typeof converter.exportAAF === "function" && typeof P.AAFExportOptions === "function";
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +364,17 @@ async function applyTimecodeBurnIn(sequenceId, matchName, options) {
   const items = await track.getTrackItems(P.Constants.TrackItemType.CLIP, false);
   if (!items.length) throw new Error("The reference sequence has no clip to burn into.");
 
+  // The burn-in's text is a fixed pixel size while its Position is a fraction
+  // of the frame, so Adobe's default x of 0.38 runs the timecode off the right
+  // edge of a 1080-wide 9x16 (docs/API-FINDINGS.md §23). Lay it out for the
+  // actual frame. A build without getFrameSize keeps Adobe's position.
+  let frameWidth = null;
+  try {
+    const rect = await seq.getFrameSize();
+    if (rect && rect.width > 0) frameWidth = rect.width;
+  } catch (e) { frameWidth = null; }
+  const layout = requireSibling("burnin").burnInLayout(frameWidth, opts.size == null ? 25 : opts.size);
+
   const chain = await items[0].getComponentChain();
   const component = await P.VideoFilterFactory.createComponent(matchName);
   if (!component) throw new Error("Could not create the burn-in effect (" + matchName + ").");
@@ -378,10 +419,17 @@ async function applyTimecodeBurnIn(sequenceId, matchName, options) {
   const sizeIndex = params.length ? params[0].index : -1;      // effect-wide Size
   const opacityIndex = params.length > 1 ? params[1].index : -1; // effect-wide Opacity
 
+  // Line 1's own Position is the first "Position" after the "Line 1" switch
+  // and before "Line 2" - every line block has one, so never the first overall.
+  const nextLine = params.find((x) => x.index > lineIndex && /^Line \d/.test(x.displayName));
+  const posHit = params.find((x) => x.index > lineIndex && x.displayName === "Position" &&
+                                    (!nextLine || x.index < nextLine.index));
+
   const lineParam = burn.getParam(lineIndex);
   const sizeParam = sizeIndex >= 0 ? burn.getParam(sizeIndex) : null;
   const opacityParam = opacityIndex >= 0 ? burn.getParam(opacityIndex) : null;
-  const size = opts.size == null ? 25 : opts.size;
+  const positionParam = posHit && layout.x != null ? burn.getParam(posHit.index) : null;
+  const size = layout.size;
   const opacity = opts.opacity == null ? 100 : opts.opacity;
 
   project.lockedAccess(() => {
@@ -390,6 +438,12 @@ async function applyTimecodeBurnIn(sequenceId, matchName, options) {
     // client are meant to read off a viewing copy.
     if (sizeParam) actions.push(sizeParam.createSetValueAction(sizeParam.createKeyframe(size), true));
     if (opacityParam) actions.push(opacityParam.createSetValueAction(opacityParam.createKeyframe(opacity), true));
+    // A point param writes as a PointF, built HERE inside lockedAccess - one
+    // built outside dies as "script object is no longer valid".
+    if (positionParam) {
+      actions.push(positionParam.createSetValueAction(
+        positionParam.createKeyframe(new P.PointF(layout.x, layout.y)), true));
+    }
     project.executeTransaction((c) => { actions.forEach((a) => c.addAction(a)); }, "Configure timecode burn-in");
   });
 
@@ -397,7 +451,8 @@ async function applyTimecodeBurnIn(sequenceId, matchName, options) {
   // params report their default no matter what was written (the numeric ones
   // read back correctly). Proof that this works is a rendered frame - see
   // exportStillFrame, which is how the phase was signed off.
-  return { componentIndex: count - 1, paramCount, lineIndex };
+  return { componentIndex: count - 1, paramCount, lineIndex, frameWidth,
+           size, positioned: !!positionParam, x: positionParam ? layout.x : null, shrunk: layout.shrunk };
 }
 
 /**
@@ -1298,6 +1353,30 @@ async function exportAAF(sequenceId, outputPath, options) {
   const seq = await resolveSequence(sequenceId);
   const opts = options || {};
 
+  if (!nativeExport("aaf")) {
+    const bridge = cepBridge();
+    const r = await bridge.request("exportAAF", {
+      sequenceId: String(sequenceId), sequenceName: seq.name, outputPath, options: opts
+    });
+    if (!r.fileExists) {
+      throw new Error("The CEP bridge reported the AAF as exported, but no file exists at " +
+                      outputPath + ". The destination folder has probably been moved or " +
+                      "deleted since it was chosen — pick it again.");
+    }
+    return {
+      exported: true,
+      path: outputPath,
+      via: "cep",
+      bytes: r.bytes,
+      mediaFiles: r.mediaFiles,
+      matchedBy: r.matchedBy,
+      // ExtendScript cannot read options back, so these are what was ASKED
+      // for - and ignoredOptions says which of those 25.x does not act on.
+      settings: Object.assign({}, opts),
+      ignoredOptions: bridge.ignoredAafOptions(opts)
+    };
+  }
+
   // One setter per control in Premiere's own AAF Export Settings dialog, in the
   // same order, so the panel and the dialog can be read side by side.
   //
@@ -1324,6 +1403,7 @@ async function exportAAF(sequenceId, outputPath, options) {
   return {
     exported,
     path: outputPath,
+    via: "uxp",
     // Read back rather than echoing what was asked for, so the report shows
     // what the exporter actually holds.
     settings: {
@@ -1477,8 +1557,20 @@ async function exportFCPXML(sequenceId, outputPath, expectedClipCount, folderEnt
   const seq = await project.getSequence(P.Guid.fromString(sequenceId));
   if (!seq) throw new Error("Sequence to export is not in the active project.");
 
-  const exported = await P.ProjectConverter.exportAsFinalCutProXML(seq, outputPath, true);
-  const result = { exported, path: outputPath, expected: expectedClipCount, found: null, shortfall: 0 };
+  let exported, via = "uxp", matchedBy = null;
+  if (nativeExport("fcpxml")) {
+    exported = await P.ProjectConverter.exportAsFinalCutProXML(seq, outputPath, true);
+  } else {
+    // Premiere 25.x: no UXP export, so ExtendScript does it via the CEP
+    // bridge. Everything below - file check, clipitem count - runs unchanged.
+    const r = await cepBridge().request("exportFCPXML", {
+      sequenceId: String(sequenceId), sequenceName: seq.name, outputPath
+    });
+    exported = !!r.exported;
+    via = "cep";
+    matchedBy = r.matchedBy || null;
+  }
+  const result = { exported, via, matchedBy, path: outputPath, expected: expectedClipCount, found: null, shortfall: 0 };
   if (!exported) return result;
 
   // Confirm the file is actually there. Exporting into a folder that no longer

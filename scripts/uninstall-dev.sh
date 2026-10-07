@@ -38,4 +38,8 @@ print("Deregistered (%d plugin(s) left registered)." % len(data["plugins"]))
 PY
 fi
 
+CEP_DEST="$HOME/Library/Application Support/Adobe/CEP/extensions/theonliner.cepbridge"
+rm -rf "$CEP_DEST"
+echo "Removed: $CEP_DEST (CEP PlayerDebugMode left on - other extensions may need it)"
+
 echo "Restart Premiere Pro for it to disappear from the panel list."

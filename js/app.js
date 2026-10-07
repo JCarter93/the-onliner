@@ -360,12 +360,20 @@ async function refreshCapabilities() {
     const c = state.caps;
     const bits = [];
     bits.push("Premiere " + (c.hostVersion || "?"));
-    bits.push(c.exportFCPXML ? "FCPXML ✓" : "FCPXML ✗");
-    bits.push(c.exportAAF ? "AAF ✓" : "AAF ✗");
+    const via = c.exportVia || {};
+    bits.push(via.fcpxml === "cep" ? "FCPXML ✓ via CEP" : (c.exportFCPXML ? "FCPXML ✓" : "FCPXML ✗"));
+    bits.push(via.aaf === "cep" ? "AAF ✓ via CEP" : (c.exportAAF ? "AAF ✓" : "AAF ✗"));
     bits.push(c.ameInstalled ? "AME ✓" : "AME ✗");
     bits.push(c.timecodeFilter ? "Burn-in ✓" : "Burn-in ✗");
     if (!prefs.isPersistent()) bits.push("settings not persisting");
     $("capsLine").textContent = bits.join("  ·  ");
+    // This build cannot export natively and the bridge that would is not up:
+    // say so where the editor will look, rather than leaving two dead ticks.
+    const bridge = c.cepBridge;
+    $("capsNote").textContent = (!c.exportFCPXML || !c.exportAAF) && bridge && !bridge.running
+      ? "This Premiere cannot export FCPXML or AAF from a plugin panel. The Onliner CEP Bridge does " +
+        "it instead — install it with scripts/install-dev and restart Premiere. Then press \u21BB."
+      : "";
     applyToggleState();
   } catch (e) {
     $("capsLine").textContent = "Capability probe failed: " + (e.message || e);
@@ -574,7 +582,10 @@ async function runReferenceExport(plan, results) {
     exportSequenceId = created.id;
     try {
       const matchName = state.caps.timecodeFilter.matchName;
-      await ppro.applyTimecodeBurnIn(created.id, matchName, {});
+      const burn = await ppro.applyTimecodeBurnIn(created.id, matchName, {});
+      logLine("REF burn-in frameWidth=" + burn.frameWidth + " size=" + burn.size +
+              " x=" + burn.x + (burn.shrunk ? " (shrunk to fit)" : "") +
+              (burn.positioned ? "" : " (Adobe's default position - frame width unknown)"));
     } catch (e) {
       // A reference sequence with no timecode on it looks fine and is wrong.
       // Roll it back rather than leave a decoy in the project.
@@ -754,7 +765,7 @@ async function buildGradeSequence(cloneId, plan, results) {
   let translation = null;
   if (xmlPath) {
     xmlResult = await ppro.exportFCPXML(cloneId, xmlPath, summary.clips, state.gradeFolder.entry);
-    logLine("GRADE xml " + xmlPath + " clipitems=" + xmlResult.found + "/" + summary.clips);
+    logLine("GRADE xml via=" + xmlResult.via + " " + xmlPath + " clipitems=" + xmlResult.found + "/" + summary.clips);
     stripped = await stripTracksIfAsked(xmlPath, state.gradeFolder.entry);
     translation = await readTranslationIssues(state.gradeFolder.entry || state.gradeFolder.path, outName);
   }
@@ -772,7 +783,7 @@ async function buildGradeSequence(cloneId, plan, results) {
     ["Flattened to V1", flat ? flat.moved.length + " clip(s) moved, " + flat.onV1 + " now on V1" : "not flattened"],
     ["Motion reset on", s.gradeResetMotion ? summary.motionReset + " clips" : "not reset"],
     ["Effects removed", s.gradeRemoveEffects ? String(summary.effectsRemoved) : "kept"],
-    ["FCPXML", xmlPath || "not exported"],
+    ["FCPXML", xmlPath ? xmlPath + (xmlResult && xmlResult.via === "cep" ? " (via the CEP bridge)" : "") : "not exported"],
     ["Clips in FCPXML", xmlResult && xmlResult.found != null
       ? xmlResult.found + " of " + summary.clips
       : "not checked"],
@@ -1036,7 +1047,7 @@ async function continueGrade() {
     const clipCount = await ppro.countVideoClips(pending.sequenceId);
     const folderEntry = pending.folder ? pending.folder.entry : null;
     const xmlResult = await ppro.exportFCPXML(pending.sequenceId, pending.xmlPath, clipCount, folderEntry);
-    logLine("GRADE continue: xml written clipitems=" + xmlResult.found + "/" + clipCount);
+    logLine("GRADE continue: xml via=" + xmlResult.via + " written clipitems=" + xmlResult.found + "/" + clipCount);
     const strippedAfter = await stripTracksIfAsked(pending.xmlPath, folderEntry);
     const translationAfter = await readTranslationIssues(
       folderEntry || platform.dirName(pending.xmlPath), pending.outName);
@@ -1146,9 +1157,13 @@ async function runMixTimeline(plan, results) {
         trimSources: s.aafRender === "trim",
         handleFrames: parseInt(s.aafHandleFrames, 10) || 0
       });
-      logLine("MIX aaf " + aafPath + " " + JSON.stringify(aaf.settings));
+      logLine("MIX aaf via=" + aaf.via + " " + aafPath + " " + JSON.stringify(aaf.settings) +
+              (aaf.ignoredOptions && aaf.ignoredOptions.length ? " ignored=" + aaf.ignoredOptions.join(",") : ""));
     }
 
+    // On 25.x the AAF only renders media with Breakout to Mono on, so "render
+    // effects" can be asked for and silently not happen - say what DID happen.
+    const fxIgnored = !!(aaf && aaf.ignoredOptions && aaf.ignoredOptions.indexOf("Render audio clip effects") >= 0);
     const rows = [
       ["Source", src],
       ["New sequence", outName],
@@ -1158,9 +1173,10 @@ async function runMixTimeline(plan, results) {
       ["Video clips removed", s.mixStripToAudio ? String(videoRemoved) : "kept"],
       ["Disabled clips removed", s.mixRemoveDisabled ? String(disabledRemoved.length) : "kept"],
       ["Effects on the timeline", { keep: "Kept", remove: "Stripped" }[s.mixEffects]],
-      ["Render audio clip effects", s.aafRenderAudioEffects ? "Yes — baked into the AAF media" : "No"],
-      ["Levels kept", String(mix.keptLevels)],
-      ["AAF", aaf ? aaf.path : "not exported"]
+      ["Render audio clip effects", !s.aafRenderAudioEffects ? "No"
+        : (fxIgnored ? "Asked for, NOT applied — see below" : "Yes — baked into the AAF media")],
+      ["Levels kept", s.mixEffects === "remove" ? String(mix.keptLevels) : "all (effects kept)"],
+      ["AAF", aaf ? aaf.path + (aaf.via === "cep" ? " (via the CEP bridge)" : "") : "not exported"]
     ];
 
     const notes = [];
@@ -1181,10 +1197,16 @@ async function runMixTimeline(plan, results) {
       notes.push("No audio effects to remove — every component on these clips was a level " +
         "or pan, which is kept.");
     }
-    if (s.aafRenderAudioEffects) {
+    if (s.aafRenderAudioEffects && !fxIgnored) {
       notes.push("Audio effects are baked into the media the AAF writes, not into the Premiere " +
         "sequence — the mix timeline still shows them, and the AAF carries them rendered. " +
         "That is Premiere's Render and Replace.");
+    }
+    if (aaf && aaf.ignoredOptions && aaf.ignoredOptions.length) {
+      notes.push("This Premiere's AAF exporter only writes new audio files when Breakout to Mono is " +
+        "on. With it off, the AAF links your original media, so " + aaf.ignoredOptions.join(", ") +
+        " had no effect. Turn on Breakout to Mono if the mixer needs rendered audio, or export " +
+        "from Premiere 2026, which renders either way.");
     }
     if (s.aafMixdownVideo) {
       notes.push("Mixdown video is ON — expect a very large AAF and a video render beside it " +

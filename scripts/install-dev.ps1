@@ -120,5 +120,36 @@ $tmp  = "$Info.tmp"
 Move-Item -LiteralPath $tmp -Destination $Info -Force
 
 Write-Host ("Registered: {0} ({1}) alongside {2} other plugin(s)." -f $Name, $Id, $others.Count)
+
+# --- 3. the CEP bridge -------------------------------------------------------
+# Premiere 25.x has no FCPXML or AAF export in its UXP API; cep-bridge\ is a
+# headless CEP extension that runs them through ExtendScript instead
+# (docs\API-FINDINGS.md section 22). Unsigned, so PlayerDebugMode must be on.
+# NOT YET RUN ON WINDOWS - verified on the Mac only.
+
+$CepDir  = Join-Path $env:APPDATA "Adobe\CEP\extensions"
+$CepDest = Join-Path $CepDir "theonliner.cepbridge"
+New-Item -ItemType Directory -Force -Path $CepDir | Out-Null
+if (Test-Path -LiteralPath $CepDest) {
+  $existing = Get-Item -LiteralPath $CepDest -Force
+  if ($existing.LinkType) { [System.IO.Directory]::Delete($CepDest) }
+  else { Remove-Item -LiteralPath $CepDest -Recurse -Force }
+}
+if ($Mode -eq "copy") {
+  & robocopy (Join-Path $Src "cep-bridge") $CepDest /MIR /NFL /NDL /NJH /NJS | Out-Null
+  if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
+  Write-Host "Copied:   $CepDest"
+} else {
+  New-Item -ItemType Junction -Path $CepDest -Value (Join-Path $Src "cep-bridge") | Out-Null
+  Write-Host "Linked:   $CepDest"
+}
+foreach ($v in 9..13) {
+  $key = "HKCU:\Software\Adobe\CSXS.$v"
+  New-Item -Path $key -Force | Out-Null
+  Set-ItemProperty -Path $key -Name PlayerDebugMode -Value "1" -Type String
+}
+Write-Host "CEP PlayerDebugMode on for CSXS 9-13 (needed for an unsigned extension)."
+
 Write-Host ""
 Write-Host "Restart Premiere Pro, then: Window > Extensions > $Name"
+Write-Host "The CEP bridge has no panel - it starts with Premiere on its own."

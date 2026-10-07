@@ -46,4 +46,12 @@ if (Test-Path -LiteralPath $Info) {
   Write-Host ("Deregistered ({0} plugin(s) left registered)." -f $kept.Count)
 }
 
+$CepDest = Join-Path $env:APPDATA "Adobe\CEP\extensions\theonliner.cepbridge"
+if (Test-Path -LiteralPath $CepDest) {
+  $existing = Get-Item -LiteralPath $CepDest -Force
+  if ($existing.LinkType) { [System.IO.Directory]::Delete($CepDest) }
+  else { Remove-Item -LiteralPath $CepDest -Recurse -Force }
+  Write-Host "Removed: $CepDest (PlayerDebugMode left on)"
+}
+
 Write-Host "Restart Premiere Pro for it to disappear from the panel list."

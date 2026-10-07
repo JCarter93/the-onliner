@@ -87,5 +87,28 @@ print("Registered: %s (%s) alongside %d other plugin(s)."
       % (name, plugin_id, len(plugins) - 1))
 PY
 
+# --- 3. the CEP bridge -------------------------------------------------------
+#
+# Premiere 25.x has no FCPXML or AAF export in its UXP API; ExtendScript has
+# both, and cep-bridge/ is a headless CEP extension that runs them for the
+# panel (docs/API-FINDINGS.md section 22). Its manifest limits it to Premiere
+# 25.x, so a 2026 install never loads it. Unsigned, so CEP's PlayerDebugMode
+# must be on - the same setting the Consolidator's dev install makes.
+
+CEP_DIR="$HOME/Library/Application Support/Adobe/CEP/extensions"
+CEP_DEST="$CEP_DIR/theonliner.cepbridge"
+mkdir -p "$CEP_DIR"
+rm -rf "$CEP_DEST"
+if [ "$MODE" = "copy" ]; then
+  /usr/bin/rsync -a --delete "$SRC/cep-bridge/" "$CEP_DEST/"
+  echo "Copied:   $CEP_DEST"
+else
+  ln -s "$SRC/cep-bridge" "$CEP_DEST"
+  echo "Linked:   $CEP_DEST -> $SRC/cep-bridge"
+fi
+for v in 9 10 11 12 13; do defaults write "com.adobe.CSXS.$v" PlayerDebugMode 1; done
+echo "CEP PlayerDebugMode on for CSXS 9-13 (needed for an unsigned extension)."
+
 echo
 echo "Restart Premiere Pro, then: Window > Extensions > $NAME"
+echo "The CEP bridge has no panel - it starts with Premiere on its own."

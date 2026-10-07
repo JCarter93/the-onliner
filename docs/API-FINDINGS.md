@@ -936,3 +936,109 @@ works. A test-harness note, not a panel bug.
 **The helper as a Scheduled Task works end to end**: `pythonw.exe` under
 `py -3`, `--log` to `%LOCALAPPDATA%\TheConformer\helper.log`, found the queue
 the panel created and heartbeat within seconds of the panel opening.
+
+## 22. Premiere 2025 (25.6.6): no FCPXML or AAF in UXP, and the CEP bridge that fills the gap
+
+Back-compat run on 2026-10-07, Premiere 25.6.6 build 5 on macOS, against a
+local copy of a real project (a 64-second 9x16 social cut: 18 video clips on
+5 tracks, 25 audio, 2 disabled, 2 adjustment layers).
+
+**Everything that builds a timeline works unchanged on 25.6.6.** Clone,
+disabled/adjustment/hidden removal, the overwrite-clone flatten, Motion reset,
+audio strip, the reference nest and the timecode burn-in all produced exactly
+the predicted result, clip for clip: 13 clips on V1 with the right top-layer
+shots kept, 24 mix clips with the disabled music cue gone.
+
+**`ProjectConverter` does not exist in 25.6.6's UXP.** The capability probe
+read `FCPXML ✗ · AAF ✗` and gated both exports off - correctly, so the run
+completed, but a 2025 user got no XML and no AAF.
+
+**ExtendScript on the same build exports both.** `seq.exportAsFinalCutProXML(path, 1)`
+wrote a 13-clipitem XML; `app.project.exportAAF(...)` wrote an AAF. A UXP panel
+cannot call ExtendScript, so `cep-bridge/` is a headless CEP extension
+(`theonliner.cepbridge`) that does it for the panel:
+
+- Talks through `cep-queue/` inside the panel's own UXP data folder - the
+  Conformer's request/response/heartbeat protocol, no network, no prompt. The
+  folder is per Premiere MAJOR (`PluginsStorage/PPRO/25/...`), so a 2025 and a
+  2026 open together never answer each other.
+- Starts with Premiere (`Lifecycle`: `AutoVisible` false, `StartOn`
+  `com.adobe.csxs.events.ApplicationActivate`, `UI Type` Custom). **Verified:
+  on 25.6.6 it started on its own at launch** and heartbeat within a second;
+  nobody opens anything.
+- The panel uses it only where the UXP export is missing, decided live at the
+  point of export (`nativeExport()` in ppro.js). Its manifest host range is
+  `[25.6,25.9]`, so 26.x does not load it at all.
+- **UXP's `sequence.guid` and ExtendScript's `sequenceID` are the same
+  string** - every request matched by ID. The exact-name fallback is there for
+  safety and refuses an ambiguous name rather than guess.
+- Verified through the real panel: FCPXML via CEP, 13/13 clipitems verified by
+  the panel's own count, 25 empty tracks then stripped from it, valid XML; AAF
+  via CEP. Malformed and unknown requests (an `eval` kind, half-written JSON)
+  are refused without running anything.
+
+**ExtendScript's `exportAAF` only writes new audio when Breakout to Mono is
+on.** Measured, same mix timeline, 14-argument form, every flag 1/0:
+
+| Breakout to Mono | Other flags | Result |
+|---|---|---|
+| off | defaults | 771,072-byte AAF linking the original MXFs, no media written |
+| off | Trim + 25 handles | byte-identical size - trim did nothing |
+| off | Embedded | byte-identical size - nothing embedded |
+| off | Render audio clip effects | byte-identical size |
+| on | 96 kHz / 16-bit, Embedded | 424 MB AAF, audio embedded, mono 96k/16 |
+| on | Separate, Copy Complete | 24 mono WAVs, 2,188 s of audio, 309 MB |
+| on | Separate, Trim + 25 handles | 26 mono WAVs, **175 s**, 25 MB - trim honoured |
+
+The 26.x UXP exporter renders trimmed stereo WAVs with Breakout off, so this is
+a real 25.x difference. The bridge does not quietly force mono - that changes
+the deliverable - it reports it: `cepbridge.ignoredAafOptions()` names the
+options 25.x will not act on, and the Mix card says so in plain words, and
+stops claiming effects were "baked into the AAF media" when they were not.
+
+Untested on 25.x: Mixdown video, "Include clip copies without effects" and
+"Preserve media directory name" through ExtendScript. Passed through as asked.
+
+Two smaller things from the same run, neither 25.x-specific:
+
+- **"Sequence's own export settings" + Render now** rendered an MPEG-2
+  612x1088 `.mpg` (the sequence's preview format) on 25.6.6, where 26.5.2 on
+  Windows refused outright. With a real preset (FULLRES_H264) the same run gave
+  a 1080x1920 H.264 MP4.
+- **The timecode burn-in clips its last digit on a 9x16 sequence** - the line
+  is laid out for 16:9. Seen with both the MPEG-2 and the H.264 reference.
+
+Not yet run: the bridge on Windows (the installer step is written, untested).
+
+## 23. The timecode burn-in is a fixed pixel size; its position is a fraction
+
+On a 9x16 reference the burn-in lost its last digit off the right edge. Measured
+on Premiere 25.6.6 by rendering the effect (through `exportAsMediaDirect` with a
+real preset - QE's `exportFramePNG` renders the effect differently and must not
+be used to measure it) on nests of three shapes:
+
+| Frame | Size | Box (w x h) | Left edge |
+|---|---|---|---|
+| 1080x1920 | 25 | 708 x 95 px | 0.381 - 40 px past the right edge |
+| 1920x1080 | 25 | 708 x 95 px | 0.380 |
+| 3840x2160 | 25 | 707 x 95 px | 0.380 |
+| 1080x1920 | 8.44 | 237 x 31 px | 0.381 |
+
+**The text is a fixed pixel size** - about 28.4 px of box width per unit of the
+effect-wide Size, on every frame - while **Line 1's Position is a fraction of
+the frame, measured to the box's left edge**. Adobe's default x of 0.38 only
+looks central on a 1920-wide frame. (Also: a burn-in is a CLIP effect, so it
+renders in the nested clip's frame - changing the reference sequence's frame
+size moves it off-screen rather than resizing it.)
+
+`js/burnin.js` lays Line 1 out for the reference's actual width from
+`sequence.getFrameSize()`: centred, and Size reduced only when even a centred
+box would not fit within 5% margins. Checked by rendering the computed positions:
+1080x1920 -> box at 185-893 px, 1920x1080 -> 605-1313 px, both centred and
+whole. A build without `getFrameSize` keeps Adobe's position. Position is a
+point param, so it is written as a `PointF` built inside `lockedAccess`.
+
+Also seen once and not explained: a reference the panel had just rendered with
+Size 25 later read back Size 8.4375 through ExtendScript (25 x 0.3375). The
+panel's render was correct; something after it changed the stored value. Not
+reproduced.

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The Onliner CEP Bridge - a headless CEP extension that gives The Onliner its
+  FCPXML and AAF exports on Premiere builds whose UXP API lacks them (25.x).
+  Invisible: no panel, no menu item. It starts with Premiere and serves the
+  queue in The Onliner's data folder. See js/main.js.
+-->
+<ExtensionManifest Version="7.0" ExtensionBundleId="theonliner.cepbridge" ExtensionBundleVersion="1.0.0"
+                   ExtensionBundleName="The Onliner CEP Bridge"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ExtensionList>
+    <Extension Id="theonliner.cepbridge.service" Version="1.0.0"/>
+  </ExtensionList>
+  <ExecutionEnvironment>
+    <HostList>
+      <!-- Premiere 2025 only. 26.x exports natively, so the bridge is not
+           loaded there at all - nothing extra running beside other tools in
+           a 2026 install. Widen this if a future build drops the UXP export. -->
+      <Host Name="PPRO" Version="[25.6,25.9]"/>
+    </HostList>
+    <LocaleList>
+      <Locale Code="All"/>
+    </LocaleList>
+    <RequiredRuntimeList>
+      <RequiredRuntime Name="CSXS" Version="9.0"/>
+    </RequiredRuntimeList>
+  </ExecutionEnvironment>
+  <DispatchInfoList>
+    <Extension Id="theonliner.cepbridge.service">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./index.html</MainPath>
+          <ScriptPath>./host/exports.jsx</ScriptPath>
+          <CEFCommandLine>
+            <Parameter>--enable-nodejs</Parameter>
+            <Parameter>--mixed-context</Parameter>
+          </CEFCommandLine>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>false</AutoVisible>
+          <StartOn>
+            <Event>com.adobe.csxs.events.ApplicationActivate</Event>
+            <Event>applicationActivate</Event>
+          </StartOn>
+        </Lifecycle>
+        <UI>
+          <Type>Custom</Type>
+          <Geometry>
+            <Size>
+              <Height>1</Height>
+              <Width>1</Width>
+            </Size>
+          </Geometry>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>
