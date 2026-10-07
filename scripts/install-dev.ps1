@@ -125,7 +125,8 @@ Write-Host ("Registered: {0} ({1}) alongside {2} other plugin(s)." -f $Name, $Id
 # Premiere 25.x has no FCPXML or AAF export in its UXP API; cep-bridge\ is a
 # headless CEP extension that runs them through ExtendScript instead
 # (docs\API-FINDINGS.md section 22). Unsigned, so PlayerDebugMode must be on.
-# NOT YET RUN ON WINDOWS - verified on the Mac only.
+# Verified on Windows 11 ARM64 (Premiere 25.6.6 and 26.5.2), 2026-10-07: the junction
+# is followed by CEP and the bridge starts with Premiere 2025.
 
 $CepDir  = Join-Path $env:APPDATA "Adobe\CEP\extensions"
 $CepDest = Join-Path $CepDir "theonliner.cepbridge"

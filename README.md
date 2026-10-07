@@ -86,8 +86,9 @@ marks each export that went through it. Its manifest limits it to Premiere
 One behaviour differs on 2025: its AAF exporter only writes new audio files
 when **Breakout to Mono** is on. With it off the AAF links the original media,
 and Trim, Embedded and Render audio clip effects do nothing - the Mix card
-says so when it happens. Verified on Premiere 25.6.6 (macOS); the Windows
-install step is written but not yet run. Details: `docs/API-FINDINGS.md` §22.
+says so when it happens. Verified on Premiere 25.6.6 on macOS and on Windows 11
+(where `install-dev.ps1` installs the bridge through a junction), and confirmed
+NOT loading on 26.5.2. Details: `docs/API-FINDINGS.md` §22 and §24.
 
 ## Tests
 

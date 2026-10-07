@@ -1008,7 +1008,7 @@ Two smaller things from the same run, neither 25.x-specific:
 - **The timecode burn-in clips its last digit on a 9x16 sequence** - the line
   is laid out for 16:9. Seen with both the MPEG-2 and the H.264 reference.
 
-Not yet run: the bridge on Windows (the installer step is written, untested).
+Windows: verified the same day - see §24.
 
 ## 23. The timecode burn-in is a fixed pixel size; its position is a fraction
 
@@ -1042,3 +1042,41 @@ Also seen once and not explained: a reference the panel had just rendered with
 Size 25 later read back Size 8.4375 through ExtendScript (25 x 0.3375). The
 panel's render was correct; something after it changed the stored value. Not
 reproduced.
+
+## 24. Windows: the CEP bridge and the burn-in layout, on 25.6.6 and 26.5.2
+
+Run 2026-10-07 in the Parallels Windows 11 ARM64 VM, Premiere 25.6.6 and 26.5.2
+installed side by side, on a 9x16 test sequence built for a known outcome (V1
+two clips, V2 hiding the second, V3 disabled; a disabled audio clip).
+
+**Installer.** `install-dev.ps1`'s new step ran clean on its first real run: a
+junction `%APPDATA%\Adobe\CEP\extensions\theonliner.cepbridge` ->
+`cep-bridge`, PlayerDebugMode "1" for CSXS 9-13, the UXP registry keeping the
+other plugin's entry. **CEP follows the junction.**
+
+**Premiere 25.6.6 on Windows.** The bridge started with Premiere on its own,
+found its queue at `%APPDATA%\Adobe\UXP\PluginsStorage\PPRO\25\External\theonliner\PluginData\cep-queue`,
+and the status line read `FCPXML ✓ via CEP · AAF ✓ via CEP`. Through the panel:
+
+- FCPXML via CEP to a `C:\...` path, 2/2 clipitems, 8 empty tracks stripped,
+  media referenced as `file://localhost/C%3a/...`;
+- AAF via CEP with Breakout to Mono ON: 6 mono 48 kHz/24-bit WAVs in `AAF Media`;
+- AAF via CEP with it OFF: a reference AAF, and the Mix card's warning naming
+  Trim and Render audio clip effects as not applied - same as on the Mac;
+- grade 1 hidden + 1 disabled removed, flattened to 2 clips; mix 3 of 4 audio
+  clips (the disabled one removed).
+
+**Premiere 26.5.2 on Windows.** The bridge did NOT load (no CEP process for
+it, no `PPRO\26` queue folder) - its `[25.6,25.9]` host range holds. Status
+line `FCPXML ✓ · AAF ✓`; the same run exported both `via=uxp`.
+
+**Burn-in.** On both versions the panel logged `frameWidth=1080 size=25
+x=0.1713`, and the rendered references put the timecode glyphs at x 197-883 on
+a 1080-wide frame - centre 540.0 exactly, nothing cut off. `getFrameSize()`
+works on 25.6.6 and 26.5.2.
+
+Driving notes (not panel bugs): a UXP `<select>` moves one option per arrow key
+once it has focus, type-ahead does nothing, and the preset list is only built
+when the panel starts, so a preset added to the user folder needs a Premiere
+restart. A floating panel window can sit partly off-screen with its footer
+hidden - dock it.
