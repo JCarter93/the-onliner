@@ -262,20 +262,18 @@ function escapeHtml(s) {
  * observed from outside Premiere, so without this a failed run leaves no trace
  * once the status line is overwritten.
  */
-async function logLine(text) {
-  try {
-    const uxp = require("uxp");
-    const folder = await uxp.storage.localFileSystem.getDataFolder();
-    let file;
-    try { file = await folder.getEntry("onliner.log"); }
-    catch (e) { file = await folder.createFile("onliner.log", { overwrite: false }); }
-    const stamp = new Date().toISOString();
-    const previous = await file.read().catch(() => "");
-    await file.write(String(previous || "") + stamp + "  " + text + "\n");
-  } catch (e) {
-    // Logging must never break a run.
-  }
-}
+// One write at a time, stamped at the call, capped - js/log.js (shared with
+// The Conformer, where the unserialised version was seen losing lines).
+const runlog = require("./js/log");
+const LOG_MAX = 512 * 1024;
+const logLine = runlog.makeLogger(async (entry) => {
+  const folder = await require("uxp").storage.localFileSystem.getDataFolder();
+  let file;
+  try { file = await folder.getEntry("onliner.log"); }
+  catch (e) { file = await folder.createFile("onliner.log", { overwrite: false }); }
+  const previous = runlog.trimLog(String((await file.read().catch(() => "")) || ""), LOG_MAX);
+  await file.write(previous + entry);
+});
 
 function setStatus(msg, kind) {
   const el = $("status");

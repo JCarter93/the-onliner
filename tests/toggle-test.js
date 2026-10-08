@@ -105,6 +105,7 @@ loadModule("js/platform.js", "./js/platform");   // presets.js and app.js requir
 loadModule("js/presets.js", "./js/presets");
 loadModule("js/fcpxml.js", "./js/fcpxml");
 loadModule("js/naming.js", "./js/naming");
+loadModule("js/log.js", "./js/log");
 loadModule("js/ppro.js", "./js/ppro");
 
 var prefs = LOADED["./js/prefs"];
