@@ -154,7 +154,9 @@ ok(valueSites > 0, "found action-value builders to check");
  * pipeline passes GUID strings; each function calls resolveSequence at entry.
  */
 var PIPELINE = [
-  "renameSequence", "stripAudioClips", "removeDisabledClips",
+  // removeDisabledClips and removeClipsOnHiddenTracks both delegate to
+  // removeClipsWhere, which is where the Sequence is resolved.
+  "renameSequence", "stripAudioClips", "removeClipsWhere",
   "removeAdjustmentLayers", "removeHiddenClips", "flattenToSingleTrack",
   "processGradeClips", "fileSequence", "writeRunManifest"
 ];

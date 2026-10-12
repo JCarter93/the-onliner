@@ -744,6 +744,30 @@ async function stripAudioClips(sequenceRef) {
  * showing there anyway.
  */
 async function removeDisabledClips(sequenceRef, kind) {
+  return removeClipsWhere(sequenceRef, kind, "Remove disabled clips", async (track, item) => {
+    try { return await item.isDisabled(); } catch (e) { return false; }
+  });
+}
+
+/**
+ * Remove every clip on a track the editor has switched off - a hidden video
+ * track (the eye) or a muted audio track.
+ *
+ * The same reasoning as disabled clips, one level up: nothing on such a track
+ * reaches the programme, but every clip on it still exports. Measured on a
+ * 9:16 test cut, a clip on hidden V2 was flattened onto V1 of the grade
+ * timeline and would have been graded. The track itself stays (Premiere cannot
+ * delete tracks); it is left empty, and "Strip empty tracks" takes it out of
+ * the XML. No ripple, for the same reason as above.
+ */
+async function removeClipsOnHiddenTracks(sequenceRef, kind) {
+  return removeClipsWhere(sequenceRef, kind, "Remove clips on hidden tracks", async (track) => {
+    try { return !!(await track.isMuted()); } catch (e) { return false; }
+  });
+}
+
+/** Remove the clips `pick` chooses, track by track, leaving gaps in place. */
+async function removeClipsWhere(sequenceRef, kind, label, pick) {
   const P = ppro();
   const project = await getActiveProject();
   const sequence = await resolveSequence(sequenceRef);
@@ -761,13 +785,11 @@ async function removeDisabledClips(sequenceRef, kind) {
     // Record POSITIONS, not handles: reading a 21-clip track is 42 awaits, and
     // handles gathered before all of them can be stale by the time they are
     // used. See removeHiddenClips for where this actually bit.
-    const disabled = [];
+    const chosen = [];
     for (let i = 0; i < items.length; i++) {
-      let off = false;
-      try { off = await items[i].isDisabled(); } catch (e) { off = false; }
-      if (off) disabled.push({ index: i, name: await items[i].getName() });
+      if (await pick(track, items[i])) chosen.push({ index: i, name: await items[i].getName() });
     }
-    if (!disabled.length) continue;
+    if (!chosen.length) continue;
 
     // Re-fetch, so every handle used below is fresh. Editor and selection are
     // acquired inside lockedAccess for the same reason - see stripAudioClips
@@ -777,16 +799,16 @@ async function removeDisabledClips(sequenceRef, kind) {
       const editor = P.SequenceEditor.getEditor(sequence);
       let selection = null;
       P.TrackItemSelection.createEmptySelection((sel) => { selection = sel; });
-      if (!selection) throw new Error("Could not build a selection to remove disabled clips with.");
-      disabled.forEach((d) => {
+      if (!selection) throw new Error("Could not build a selection to " + label.toLowerCase() + " with.");
+      chosen.forEach((d) => {
         const item = fresh[d.index];
         if (!item) return;
         try { selection.addItem(item, true); } catch (e) { /* already present */ }
       });
       const action = editor.createRemoveItemsAction(selection, false, mediaType, false);
-      project.executeTransaction((c) => { c.addAction(action); }, "Remove disabled clips");
+      project.executeTransaction((c) => { c.addAction(action); }, label);
     });
-    disabled.forEach((d) => removed.push({ track: prefix + (t + 1), name: d.name }));
+    chosen.forEach((d) => removed.push({ track: prefix + (t + 1), name: d.name }));
   }
   return removed;
 }
@@ -1608,6 +1630,7 @@ module.exports = {
   renameSequence,
   stripAudioClips,
   removeDisabledClips,
+  removeClipsOnHiddenTracks,
   removeAdjustmentLayers,
   removeHiddenClips,
   flattenToSingleTrack,

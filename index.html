@@ -65,10 +65,11 @@
         <div class="note">Position, scale and rotation. Motion itself cannot be
         removed, only reset &mdash; same for Opacity.</div>
         <sp-checkbox id="gradeRemoveEffects" size="s">Remove other applied effects</sp-checkbox>
-        <sp-checkbox id="gradeRemoveDisabled" size="s">Remove disabled clips</sp-checkbox>
-        <div class="note">Clips switched off in the edit are invisible in the
-        programme but still export into the XML. Gaps are left in place &mdash;
-        nothing is rippled, so the conform still lines up.</div>
+        <sp-checkbox id="gradeRemoveDisabled" size="s">Remove disabled clips and hidden tracks</sp-checkbox>
+        <div class="note">Clips switched off in the edit, and everything on a
+        hidden track, are invisible in the programme but still export into the
+        XML. Gaps are left in place &mdash; nothing is rippled, so the conform
+        still lines up.</div>
         <sp-checkbox id="gradeRemoveAdjustment" size="s">Remove adjustment layers</sp-checkbox>
         <div class="note">They almost always carry the temp grade, which is the
         last thing the colourist wants arriving on top of their timeline.</div>
@@ -111,10 +112,11 @@
       <sp-checkbox id="mixEnabled" size="s">Build a mix timeline</sp-checkbox>
       <div id="mixBody" class="subfield">
         <sp-checkbox id="mixStripToAudio" size="s">Strip to audio-only tracks</sp-checkbox>
-        <sp-checkbox id="mixRemoveDisabled" size="s">Remove disabled clips</sp-checkbox>
-        <div class="note">Audio switched off in the edit is silent in the
-        programme but still travels in the AAF. Gaps are left in place &mdash;
-        nothing is rippled, so the sync is unchanged.</div>
+        <sp-checkbox id="mixRemoveDisabled" size="s">Remove disabled clips and muted tracks</sp-checkbox>
+        <div class="note">Audio switched off in the edit, and everything on a
+        muted track, is silent in the programme but still travels in the AAF.
+        Gaps are left in place &mdash; nothing is rippled, so the sync is
+        unchanged.</div>
         <div class="sublabel">Audio effects on the mix timeline</div>
         <sp-radio-group id="mixEffects" column>
           <sp-radio value="keep" size="s">Keep</sp-radio>

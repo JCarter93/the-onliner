@@ -672,6 +672,13 @@ async function buildGradeSequence(cloneId, plan, results) {
     disabledRemoved = await ppro.removeDisabledClips(cloneId, "video");
     logLine("GRADE removed " + disabledRemoved.length + " disabled clip(s)");
   }
+  // Rides on the same switch: a hidden track is "switched off" one level up,
+  // and was being flattened into the picture and graded.
+  let hiddenTrackRemoved = [];
+  if (s.gradeRemoveDisabled) {
+    hiddenTrackRemoved = await ppro.removeClipsOnHiddenTracks(cloneId, "video");
+    logLine("GRADE removed " + hiddenTrackRemoved.length + " clip(s) on hidden tracks");
+  }
 
   let adjustmentRemoved = [];
   if (s.gradeRemoveAdjustment) {
@@ -711,6 +718,7 @@ async function buildGradeSequence(cloneId, plan, results) {
     "When: " + new Date().toISOString(),
     "Stripped to video: " + (s.gradeStripToVideo ? "yes (" + audioRemoved + " audio clips removed)" : "no"),
     "Disabled clips removed: " + (s.gradeRemoveDisabled ? disabledRemoved.length : "kept"),
+    "Clips on hidden tracks removed: " + (s.gradeRemoveDisabled ? hiddenTrackRemoved.length : "kept"),
     "Adjustment layers removed: " + (s.gradeRemoveAdjustment ? adjustmentRemoved.length : "kept"),
     "Hidden clips removed: " + (s.gradeRemoveHidden ? hidden.removed.length : "kept"),
     "Flattened to V1: " + (flat ? flat.moved.length + " moved" : "no"),
@@ -776,6 +784,7 @@ async function buildGradeSequence(cloneId, plan, results) {
     ["Clips processed", String(summary.clips)],
     ["Audio clips removed", s.gradeStripToVideo ? String(audioRemoved) : "not stripped"],
     ["Disabled clips removed", s.gradeRemoveDisabled ? String(disabledRemoved.length) : "kept"],
+    ["Clips on hidden tracks removed", s.gradeRemoveDisabled ? String(hiddenTrackRemoved.length) : "kept"],
     ["Adjustment layers removed", s.gradeRemoveAdjustment ? String(adjustmentRemoved.length) : "kept"],
     ["Hidden clips removed", s.gradeRemoveHidden ? String(hidden.removed.length) : "kept"],
     ["Flattened to V1", flat ? flat.moved.length + " clip(s) moved, " + flat.onV1 + " now on V1" : "not flattened"],
@@ -856,6 +865,13 @@ async function buildGradeSequence(cloneId, plan, results) {
       title: "Disabled clips removed", kind: "ok", total: disabledRemoved.length,
       lead: "Gaps were left in place rather than rippled, so the timing is unchanged.",
       rows: clipRows(disabledRemoved, 6)
+    }));
+  }
+  if (hiddenTrackRemoved.length) {
+    groups.push(reportGroup({
+      title: "Clips on hidden tracks removed", kind: "ok", total: hiddenTrackRemoved.length,
+      lead: "The track is switched off in the edit, so none of this reaches the programme. If a track was only hidden while you worked, show it and run again.",
+      rows: clipRows(hiddenTrackRemoved, 6)
     }));
   }
   // The loudest possible warning: the handoff file is short of shots.
@@ -1121,6 +1137,12 @@ async function runMixTimeline(plan, results) {
       disabledRemoved = await ppro.removeDisabledClips(clone.id, "audio");
       logLine("MIX removed " + disabledRemoved.length + " disabled audio clip(s)");
     }
+    // A muted audio track is silent in the programme, like a disabled clip.
+    let mutedTrackRemoved = [];
+    if (s.mixRemoveDisabled) {
+      mutedTrackRemoved = await ppro.removeClipsOnHiddenTracks(clone.id, "audio");
+      logLine("MIX removed " + mutedTrackRemoved.length + " clip(s) on muted tracks");
+    }
 
     // "Render and Replace" is not a separate export-and-reimport pass: the AAF
     // exporter can bake audio effects into the media it writes, which reaches
@@ -1135,6 +1157,7 @@ async function runMixTimeline(plan, results) {
       "When: " + new Date().toISOString(),
       "Stripped to audio: " + (s.mixStripToAudio ? "yes (" + videoRemoved + " video clips removed)" : "no"),
       "Disabled clips removed: " + (s.mixRemoveDisabled ? disabledRemoved.length : "kept"),
+      "Clips on muted tracks removed: " + (s.mixRemoveDisabled ? mutedTrackRemoved.length : "kept"),
       "Effects: " + s.mixEffects,
       "Audio clips: " + mix.clips
     ].join("\n"));
@@ -1170,6 +1193,7 @@ async function runMixTimeline(plan, results) {
       ["Audio clips", String(mix.clips)],
       ["Video clips removed", s.mixStripToAudio ? String(videoRemoved) : "kept"],
       ["Disabled clips removed", s.mixRemoveDisabled ? String(disabledRemoved.length) : "kept"],
+      ["Clips on muted tracks removed", s.mixRemoveDisabled ? String(mutedTrackRemoved.length) : "kept"],
       ["Effects on the timeline", { keep: "Kept", remove: "Stripped" }[s.mixEffects]],
       ["Render audio clip effects", !s.aafRenderAudioEffects ? "No"
         : (fxIgnored ? "Asked for, NOT applied — see below" : "Yes — baked into the AAF media")],
@@ -1184,6 +1208,13 @@ async function runMixTimeline(plan, results) {
         title: "Disabled audio removed", kind: "ok", total: disabledRemoved.length,
         lead: "Gaps were left in place rather than rippled, so sync is unchanged.",
         rows: clipRows(disabledRemoved, 6)
+      }));
+    }
+    if (mutedTrackRemoved.length) {
+      groups.push(reportGroup({
+        title: "Clips on muted tracks removed", kind: "ok", total: mutedTrackRemoved.length,
+        lead: "The track is muted in the edit, so none of this is heard. If a track was only muted while you worked, unmute it and run again.",
+        rows: clipRows(mutedTrackRemoved, 6)
       }));
     }
     if (s.mixEffects === "remove" && mix.effectsRemoved) {

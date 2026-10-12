@@ -161,6 +161,12 @@ and optionally **flattens everything onto V1** with the top layer winning. All
 three are checkboxes; flatten is off by default because it is destructive to
 real composites.
 
+Everything on a **hidden video track** goes too, with the disabled clips (same
+checkbox): nothing on it reaches the programme, but it still exports — on a
+9:16 test cut a clip on hidden V2 was flattened onto V1 and would have been
+graded. The report lists every clip removed this way, so a track that was only
+hidden while working is easy to spot and re-run.
+
 Graphics are removed **by hand** before running — the panel does not try to
 identify them, and the flatten report lists every clip it moved so a graphic
 that won over a shot is easy to spot.
@@ -194,7 +200,8 @@ export-and-reimport subsystem the spec planned — it bakes effects into the med
 the AAF writes, reaching the same place with far less to go wrong.
 
 Mix also removes **disabled clips** from the audio tracks — the teaser had 25,
-muted in the edit but still travelling in the AAF.
+muted in the edit but still travelling in the AAF — and everything on a
+**muted audio track**, for the same reason. Both are listed in the report.
 
 Levels are never stripped: `Internal Volume` / `Channel Volume` / `Pan` are
 fixed components carrying the edit's levels, not effects. A real run kept all
