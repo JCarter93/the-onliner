@@ -14,6 +14,46 @@ Plugin id `theonliner`. Built on a Mac; runs on Windows too — verified on
 Premiere 26.5.2 (Windows 11 ARM64), see "Windows" below. MIT licence, see
 `LICENSE`.
 
+## Testing and status — please read
+
+This was built for one post-production team's workflow and has been tested on
+that team's real jobs and on purpose-built test edits — not across the full
+range of machines, Premiere versions and projects it could meet. Treat it as
+working software that will still need tweaks, which is part of it being open
+source: if it misbehaves on your setup, that is useful information.
+
+**Exercised so far:**
+
+- **macOS, Premiere 26.3** (where it was built), end to end on a real
+  60-second teaser — 49 clips, 25 of them multicam: reference with burn-in,
+  grade timeline with a complete 29-of-29 FCPXML, mix timeline with an AAF.
+- **macOS and Windows 11, Premiere 25.6.6**, including the CEP bridge that
+  writes the FCPXML and AAF on 25.x.
+- **Windows 11, Premiere 26.5.2** — grade (FCPXML), mix (AAF), reference with
+  a preset, and the hidden/muted-track removal. These Windows runs were in an
+  ARM64 virtual machine without a GPU.
+- **About 480 automated assertions** on the logic that does not need Premiere
+  (`scripts/run-tests.sh`), including fakes of the Premiere API for the parts
+  where a bug once slipped through. Everything Premiere itself does was checked
+  by hand, and what each build was measured to do is recorded in
+  `docs/API-FINDINGS.md`.
+
+**Not yet exercised:** Windows on a regular x64 machine with a real GPU;
+Premiere versions outside 25.6–26.5; queuing to Media Encoder on Windows;
+timelines at NTSC or drop-frame rates (testing was at 25 and 50 fps); projects
+much larger than the teaser. Premiere's UXP API is young and changes between
+releases, and several things here work around behaviour measured on one
+specific build — a new Premiere release can break them.
+
+**Reporting a problem:** open an issue with your OS, the Premiere version
+(from About Premiere Pro), what you expected and what happened, and the run log — every
+run writes `onliner.log` to the panel's data folder:
+
+- Mac: `~/Library/Application Support/Adobe/UXP/PluginsStorage/PPRO/<ver>/External/theonliner/PluginData/onliner.log`
+- Windows: `%APPDATA%\Adobe\UXP\PluginsStorage\PPRO\<ver>\External\theonliner\PluginData\onliner.log`
+
+Pull requests are welcome; please run `scripts/run-tests.sh` first.
+
 ## Install (dev)
 
 ```bash
@@ -68,8 +108,9 @@ a preset rendered an 8-second ProRes with the burn-in. Two things only that
 machine could teach: a `require()` from inside `js/` resolves against `js/`,
 not the plugin root (hence `requireSibling`), and the registry path must be
 `$localPlugins\External\<id>` with backslashes. Both are in
-`docs/API-FINDINGS.md` §20. Not exercised there: the AAF export and the
-queue-to-AME route, which use the same path shape as the two that were.
+`docs/API-FINDINGS.md` §20. The AAF export has since been run there too
+(natively on 26.5.2, through the CEP bridge on 25.6.6); the queue-to-AME route
+has not.
 
 ## Premiere 2025
 
@@ -96,10 +137,13 @@ NOT loading on 26.5.2. Details: `docs/API-FINDINGS.md` §22 and §24.
 ./scripts/run-tests.sh
 ```
 
-The pure-logic tests run under JavaScriptCore (`jsc`), so they need no Node. Only logic that does not touch the Premiere API is
-covered this way — naming, collision versioning, file-stem sanitising. Anything
-that talks to Premiere is tested in the app, per the phase test plans in the
-build spec.
+The tests run under JavaScriptCore (`jsc`), so they need no Node: naming and
+collision versioning, the FCPXML strip, burn-in layout, the CEP bridge
+protocol, the run log, the settings toggles against the real `app.js`, and
+hidden/muted-track removal driven through the real `ppro.js` on a fake host.
+Static guards catch Premiere rules no unit test can reach (actions created
+inside `lockedAccess`, sequences re-resolved per stage, no hard-coded platform
+paths). Anything else that talks to Premiere is tested in the app.
 
 ## Layout
 
@@ -143,8 +187,8 @@ two seconds (sequence timecode, exact), and the no-timecode path exports
 cleanly with the effect skipped. A second run produced `_REF_v02`, so collision
 versioning is proven live too.
 
-**Phase 3 (grade timeline) — code complete, engine pre-flighted against a real
-sequence, not yet run through the panel.** Duplicates the locked sequence,
+**Phase 3 (grade timeline) — built and run through the panel on real footage
+(see Status above).** Duplicates the locked sequence,
 empties the audio, resets Motion, strips the temp grade, files the result in
 `FOR_GRADE` with a violet label and a run-manifest marker, and exports FCPXML.
 
